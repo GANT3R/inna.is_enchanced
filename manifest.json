@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Inna Attendance Colors",
+  "version": "3.3",
+  "description": "Colors timetable lessons by attendance status.",
+  "content_scripts": [
+    {
+      "matches": ["https://nam.inna.is/Components/Students/Students.html*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "https://nam.inna.is/*"
+  ],
+  "permissions": ["storage"],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}
