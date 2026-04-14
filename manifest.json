@@ -1,8 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Inna Attendance Colors",
+  "name": "Inna Enhanced",
   "version": "3.3",
-  "description": "Colors timetable lessons by attendance status.",
+  "description": "Syncs attendance into nam.inna.is timetable, highlights classes, and shows lunch and long free-time gaps.",
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["https://nam.inna.is/Components/Students/Students.html*"],
@@ -14,6 +22,12 @@
     "https://nam.inna.is/*"
   ],
   "permissions": ["storage"],
+  "web_accessible_resources": [
+    {
+      "resources": ["new_theme.css"],
+      "matches": ["https://nam.inna.is/*"]
+    }
+  ],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true

@@ -12,11 +12,24 @@ const RUN_DEBOUNCE_MS = 600;
 const UI_SYNC_DEBOUNCE_MS = 180;
 const SNAPSHOT_ATTEMPTS = 24;
 const SNAPSHOT_POLL_MS = 350;
+const MIN_FREE_GAP_MINUTES = 50;
+const LUNCH_GAP_START_MINUTES = 12 * 60 + 20;
+const LUNCH_GAP_END_MINUTES = 12 * 60 + 55;
 
 const LOG_ENABLED = true;
 
+const THEME_DEFAULT = "default";
+const THEME_NEW = "new";
+const LUNCH_ROW_REDUCTION_MIN = 0;
+const LUNCH_ROW_REDUCTION_MAX = 30;
+const LUNCH_ROW_REDUCTION_DEFAULT = 0;
+const NEW_THEME_STYLE_ID = "inna-attendance-theme-style";
+const NEW_THEME_CSS_PATH = "new_theme.css";
+
 const DEFAULT_SETTINGS = {
   language: "en",
+  theme: THEME_DEFAULT,
+  lunchRowReductionPercent: LUNCH_ROW_REDUCTION_DEFAULT,
   presentColor: "#22c55e",
   absentColor: "#ef4444"
 };
@@ -34,27 +47,31 @@ const I18N = {
     retryingStatus: "Attendance: retrying ({current}/{max})",
     notReadyStatus: "Attendance: not ready, use Refresh attendance",
     parseFailedStatus: "Attendance: parse failed, use Refresh attendance",
+    freeGapLabel: "Free time",
+    lunchGapLabel: "Lunch time",
     readyDetailedStatus: "Attendance: ready ({matched}/{total} matched)",
     updatedStatus: "Attendance: updated ({matched}/{total} matched)",
     restoredStatus: "Attendance: restored cached result ({matched}/{total} matched)",
     errorStatus: "Attendance: error"
   },
   is: {
-    panelTitle: "Mætingarsamstilling",
-    refreshButton: "Uppfæra mætingu",
-    refreshingButton: "Uppfæri...",
-    waitingStatus: "Bíð eftir samstillingu",
-    waitingTimetableStatus: "Mæting: bíð eftir stundatöflu",
-    noRowsStatus: "Mæting: engir tímar fundust",
-    loadingStatus: "Mæting: sæki gögn...",
-    manualRefreshStatus: "Mæting: handvirk uppfærsla...",
-    retryingStatus: "Mæting: reyni aftur ({current}/{max})",
-    notReadyStatus: "Mæting: gögn ekki tilbúin, notaðu „Uppfæra mætingu“",
-    parseFailedStatus: "Mæting: tókst ekki að lesa gögn, notaðu „Uppfæra mætingu“",
-    readyDetailedStatus: "Mæting: tilbúin ({matched}/{total} pöruð)",
-    updatedStatus: "Mæting: uppfært ({matched}/{total} pöruð)",
-    restoredStatus: "Mæting: endurheimti skyndiminni ({matched}/{total} pöruð)",
-    errorStatus: "Mæting: villa"
+    panelTitle: "M\u00E6tingarsamstilling",
+    refreshButton: "Uppf\u00E6ra m\u00E6tingu",
+    refreshingButton: "Uppf\u00E6ri...",
+    waitingStatus: "B\u00ED\u00F0 eftir samstillingu",
+    waitingTimetableStatus: "M\u00E6ting: b\u00ED\u00F0 eftir stundat\u00F6flu",
+    noRowsStatus: "M\u00E6ting: engir t\u00EDmar fundust",
+    loadingStatus: "M\u00E6ting: s\u00E6ki g\u00F6gn...",
+    manualRefreshStatus: "M\u00E6ting: handvirk uppf\u00E6rsla...",
+    retryingStatus: "M\u00E6ting: reyni aftur ({current}/{max})",
+    notReadyStatus: "M\u00E6ting: g\u00F6gn ekki tilb\u00FAin, nota\u00F0u \"Uppf\u00E6ra m\u00E6tingu\"",
+    parseFailedStatus: "M\u00E6ting: t\u00F3kst ekki a\u00F0 lesa g\u00F6gn, nota\u00F0u \"Uppf\u00E6ra m\u00E6tingu\"",
+    freeGapLabel: "Laust bil",
+    lunchGapLabel: "H\u00E1degishl\u00E9",
+    readyDetailedStatus: "M\u00E6ting: tilb\u00FAin ({matched}/{total} p\u00F6ru\u00F0)",
+    updatedStatus: "M\u00E6ting: uppf\u00E6rt ({matched}/{total} p\u00F6ru\u00F0)",
+    restoredStatus: "M\u00E6ting: endurheimti skyndiminni ({matched}/{total} p\u00F6ru\u00F0)",
+    errorStatus: "M\u00E6ting: villa"
   }
 };
 
@@ -123,6 +140,7 @@ async function init() {
 
   injectBaseStyles();
   applySettingsToCss();
+  applyThemeStyles();
   ensureRefreshPanel();
   refreshObserverRoot();
   bindStorageListener();
@@ -184,10 +202,26 @@ function bindStorageListener() {
       changed = true;
     }
 
+    if (changes.theme) {
+      next.theme = changes.theme.newValue;
+      changed = true;
+    }
+
+    if (changes.lunchRowReductionPercent) {
+      next.lunchRowReductionPercent = changes.lunchRowReductionPercent.newValue;
+      changed = true;
+    }
+
+    if (changes.lunchRowStyle) {
+      next.lunchRowReductionPercent = normalizeLunchRowReductionPercent(changes.lunchRowStyle.newValue);
+      changed = true;
+    }
+
     if (!changed) return;
 
     settings = sanitizeSettings(next);
     applySettingsToCss();
+    applyThemeStyles();
     updatePanelTexts();
 
     if (cachedAttendance) {
@@ -236,11 +270,14 @@ async function run(reason = "manual", forceManual = false) {
       return;
     }
 
+    removeDashboardGapRows();
     const dashboardRows = getDashboardLessonRows();
     if (!dashboardRows.length) {
       setStatus("noRowsStatus");
       return;
     }
+
+    syncDashboardGapRows(dashboardRows);
 
     if (!forceManual && canUseCachedAttendance(todayInfo)) {
       colorDashboardRows(todayInfo, dashboardRows, cachedAttendance.map);
@@ -368,9 +405,27 @@ function storageGet(defaults) {
 function sanitizeSettings(raw) {
   return {
     language: raw?.language === "is" ? "is" : "en",
+    theme: normalizeTheme(raw?.theme),
+    lunchRowReductionPercent: normalizeLunchRowReductionPercent(
+      raw?.lunchRowReductionPercent ?? raw?.lunchRowStyle
+    ),
     presentColor: normalizeHexColor(raw?.presentColor, DEFAULT_SETTINGS.presentColor),
     absentColor: normalizeHexColor(raw?.absentColor, DEFAULT_SETTINGS.absentColor)
   };
+}
+
+function normalizeTheme(value) {
+  return value === THEME_NEW ? THEME_NEW : THEME_DEFAULT;
+}
+
+function normalizeLunchRowReductionPercent(value) {
+  if (value === "compact") return LUNCH_ROW_REDUCTION_MAX;
+  if (value === "normal") return LUNCH_ROW_REDUCTION_DEFAULT;
+
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return LUNCH_ROW_REDUCTION_DEFAULT;
+
+  return Math.min(LUNCH_ROW_REDUCTION_MAX, Math.max(LUNCH_ROW_REDUCTION_MIN, parsed));
 }
 
 function tr(key, vars = {}) {
@@ -517,6 +572,37 @@ function injectBaseStyles() {
       cursor: wait;
     }
 
+    .inna-att-gap-row--free > td,
+    .inna-att-gap-row--free > [role="cell"] {
+      background: rgba(148, 163, 184, 0.14) !important;
+      color: #3f4f63 !important;
+      border-top: 1px dashed rgba(100, 116, 139, 0.55) !important;
+      font-style: italic;
+    }
+    .inna-att-gap-row--lunch > td,
+    .inna-att-gap-row--lunch > [role="cell"] {
+      background: rgba(251, 191, 36, 0.18) !important;
+      color: #6b4f00 !important;
+      border-top: 1px dashed rgba(180, 126, 0, 0.6) !important;
+      font-style: italic;
+    }
+
+    .inna-att-gap-row--lunch.inna-att-gap-row--lunch-scaled > td,
+    .inna-att-gap-row--lunch.inna-att-gap-row--lunch-scaled > [role="cell"] {
+      font-size: calc(100% * var(--inna-att-lunch-scale-factor, 1)) !important;
+      line-height: calc(1.2 * var(--inna-att-lunch-scale-factor, 1)) !important;
+      padding-top: calc(8px * var(--inna-att-lunch-scale-factor, 1)) !important;
+      padding-bottom: calc(8px * var(--inna-att-lunch-scale-factor, 1)) !important;
+    }
+    .inna-att-gap-time {
+      opacity: 0.95;
+    }
+
+    .inna-att-gap-label {
+      font-weight: 600;
+      letter-spacing: 0.15px;
+    }
+
     @keyframes inna-spin {
       to { transform: rotate(360deg); }
     }
@@ -550,6 +636,32 @@ function applySettingsToCss() {
   `;
 }
 
+function applyThemeStyles() {
+  const theme = normalizeTheme(settings.theme);
+  if (theme === THEME_NEW) {
+    ensureNewThemeStyle();
+    return;
+  }
+
+  removeNewThemeStyle();
+}
+
+function ensureNewThemeStyle() {
+  if (document.getElementById(NEW_THEME_STYLE_ID)) return;
+
+  const link = document.createElement("link");
+  link.id = NEW_THEME_STYLE_ID;
+  link.rel = "stylesheet";
+  link.type = "text/css";
+  link.href = chrome.runtime.getURL(NEW_THEME_CSS_PATH);
+
+  (document.head || document.documentElement).appendChild(link);
+}
+
+function removeNewThemeStyle() {
+  const node = document.getElementById(NEW_THEME_STYLE_ID);
+  if (node) node.remove();
+}
 function refreshObserverRoot() {
   const nextRoot = findTimetableModuleRoot() || document.body || document.documentElement;
   if (!nextRoot) return;
@@ -597,6 +709,9 @@ function mutationsAreOnlyOurUi(mutations) {
       if (node.id === "inna-attendance-hidden-frame") return true;
       if (node.id === "inna-attendance-base-style") return true;
       if (node.id === "inna-attendance-dynamic-style") return true;
+      if (node.id === NEW_THEME_STYLE_ID) return true;
+      if (node.classList.contains("inna-att-gap-row")) return true;
+      if (node.closest?.(".inna-att-gap-row")) return true;
       if (node.classList.contains("inna-att-indicator")) return true;
       if (node.closest?.("#inna-att-panel")) return true;
       return false;
@@ -613,8 +728,11 @@ function applyCachedStateToCurrentLayout() {
   if (!todayInfo) return;
   if (makeDayKey(todayInfo) !== cachedAttendance.dayKey) return;
 
+  removeDashboardGapRows();
   const rows = getDashboardLessonRows();
   if (!rows.length) return;
+
+  syncDashboardGapRows(rows);
 
   colorDashboardRows(todayInfo, rows, cachedAttendance.map);
   setStatus("readyDetailedStatus", {
@@ -830,7 +948,7 @@ function isAttendanceTextReady(text) {
   if (normalized.length < 60) return false;
 
   const hasLessonRows =
-    /(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s+[A-ZÁÉÍÓÚÝÞÆÖ0-9]+-\d+/u.test(normalized);
+    /(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s+[A-Z\u00C1\u00C9\u00CD\u00D3\u00DA\u00DD\u00DE\u00C6\u00D60-9]+-\d+/u.test(normalized);
 
   const hasAnyTimeRange =
     /(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/.test(normalized);
@@ -861,7 +979,7 @@ function getDashboardLessonRows() {
       const rowText = normalizeText(row.innerText || "");
       const timeMatch = rowText.match(/(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})/);
       const codeMatch = normalizeText(a.innerText).match(
-        /([A-ZÁÉÍÓÚÝÞÆÖ0-9]+)\s*\(\s*(\d+)\s*\)/u
+        /([A-Z\u00C1\u00C9\u00CD\u00D3\u00DA\u00DD\u00DE\u00C6\u00D60-9]+)\s*\(\s*(\d+)\s*\)/u
       );
 
       if (!timeMatch || !codeMatch) return null;
@@ -880,6 +998,118 @@ function getDashboardLessonRows() {
     .filter(Boolean);
 }
 
+function syncDashboardGapRows(rows) {
+  removeDashboardGapRows();
+
+  if (!Array.isArray(rows) || rows.length < 2) return;
+
+  for (let i = 0; i < rows.length - 1; i++) {
+    const current = rows[i];
+    const next = rows[i + 1];
+
+    if (!current?.element || !next?.element) continue;
+    if (!current.element.isConnected || !next.element.isConnected) continue;
+    if (current.element.parentElement !== next.element.parentElement) continue;
+
+    const gapStart = normalizeTime(current.end);
+    const gapEnd = normalizeTime(next.start);
+
+    const gapStartMinutes = parseTimeToMinutes(gapStart);
+    const gapEndMinutes = parseTimeToMinutes(gapEnd);
+
+    if (gapStartMinutes === null || gapEndMinutes === null) continue;
+    if (gapEndMinutes <= gapStartMinutes) continue;
+
+    const gapMinutes = gapEndMinutes - gapStartMinutes;
+    const gapKind = classifyGapKind(gapStartMinutes, gapEndMinutes);
+    if (!gapKind) continue;
+
+    const gapRow = buildDashboardGapRow(current.element, gapStart, gapEnd, gapMinutes, gapKind);
+    if (gapRow) current.element.insertAdjacentElement("afterend", gapRow);
+  }
+}
+
+function removeDashboardGapRows() {
+  document.querySelectorAll(".inna-att-gap-row").forEach(node => node.remove());
+}
+
+function buildDashboardGapRow(referenceRow, startTime, endTime, gapMinutes, gapKind) {
+  const row = referenceRow.cloneNode(true);
+  row.classList.remove("inna-att-green", "inna-att-red");
+  row.classList.add("inna-att-gap-row");
+  row.classList.add(gapKind === "lunch" ? "inna-att-gap-row--lunch" : "inna-att-gap-row--free");
+
+  const lunchRowReductionPercent = normalizeLunchRowReductionPercent(settings.lunchRowReductionPercent);
+  if (gapKind === "lunch" && lunchRowReductionPercent > 0) {
+    const scaleFactor = 1 - lunchRowReductionPercent / 100;
+    row.classList.add("inna-att-gap-row--lunch-scaled");
+    row.style.setProperty("--inna-att-lunch-scale-factor", String(scaleFactor));
+  }
+
+  row.querySelectorAll(".inna-att-indicator").forEach(node => node.remove());
+
+  const cells = row.querySelectorAll("td, [role='cell']");
+  if (!cells.length) return null;
+
+  const timeCell = cells[0];
+  timeCell.classList.remove("inna-att-time-cell");
+  timeCell.classList.add("inna-att-gap-time");
+  timeCell.innerHTML = `<b>${startTime}</b> <br><b>${endTime}</b>`;
+
+  for (let i = 1; i < cells.length; i++) {
+    cells[i].textContent = "";
+  }
+
+  if (cells[1]) {
+    cells[1].classList.add("inna-att-gap-label");
+    const labelKey = gapKind === "lunch" ? "lunchGapLabel" : "freeGapLabel";
+    cells[1].textContent = `${tr(labelKey)} (${formatGapDuration(gapMinutes)})`;
+  }
+
+  return row;
+}
+
+function parseTimeToMinutes(value) {
+  const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function classifyGapKind(startMinutes, endMinutes) {
+  const gapMinutes = endMinutes - startMinutes;
+
+  const isLunchGap =
+    startMinutes === LUNCH_GAP_START_MINUTES &&
+    endMinutes === LUNCH_GAP_END_MINUTES;
+
+  if (isLunchGap) return "lunch";
+  if (gapMinutes >= MIN_FREE_GAP_MINUTES) return "free";
+  return null;
+}
+
+function formatGapDuration(totalMinutes) {
+  const minutes = Math.max(1, Math.round(Number(totalMinutes) || 0));
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  const isIcelandic = settings.language === "is";
+
+  if (hours && restMinutes) {
+    return isIcelandic
+      ? `${hours} klst ${restMinutes} m\u00EDn`
+      : `${hours}h ${restMinutes}m`;
+  }
+
+  if (hours) {
+    return isIcelandic ? `${hours} klst` : `${hours}h`;
+  }
+
+  return isIcelandic ? `${restMinutes} m\u00EDn` : `${restMinutes}m`;
+}
 function findLikelyTimeCell(row) {
   const cells = row.querySelectorAll("td, [role='cell']");
   if (cells?.[0]) return cells[0];
@@ -961,7 +1191,7 @@ function parseLessonsFromText(text) {
   const normalized = normalizeText(text);
 
   const regex =
-    /(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s+([A-ZÁÉÍÓÚÝÞÆÖ0-9]+)-(\d+)(?:\s+([A-ZÓ]))?(?=\s+\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}|\s+Print\b|$)/gu;
+    /(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s+([A-Z\u00C1\u00C9\u00CD\u00D3\u00DA\u00DD\u00DE\u00C6\u00D60-9]+)-(\d+)(?:\s+([A-Z\u00D3]))?(?=\s+\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}|\s+Print\b|$)/gu;
 
   let match;
   while ((match = regex.exec(normalized)) !== null) {
@@ -1125,3 +1355,4 @@ function hexToRgba(hex, alpha) {
   const b = parseInt(value.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+

@@ -1,0 +1,372 @@
+:root {
+  --iac-bg: #0f1419;
+  --iac-surface-1: #151b23;
+  --iac-surface-2: #1c2430;
+  --iac-surface-3: #243041;
+  --iac-border: #2c394d;
+  --iac-border-soft: #233044;
+
+  --iac-text: #e6edf3;
+  --iac-text-muted: #a6b4c3;
+  --iac-text-faint: #7f90a3;
+
+  --iac-primary: #4ea1ff;
+  --iac-primary-hover: #75b6ff;
+  --iac-primary-soft: rgba(78, 161, 255, 0.18);
+
+  --iac-success: #57c27c;
+  --iac-warning: #f0b35a;
+  --iac-danger: #ee6b73;
+
+  --iac-shadow-soft: 0 6px 20px rgba(0, 0, 0, 0.26);
+  --iac-shadow-strong: 0 10px 28px rgba(0, 0, 0, 0.32);
+}
+
+html,
+body {
+  background: var(--iac-bg) !important;
+  color: var(--iac-text) !important;
+}
+
+body,
+.container,
+.containMobile,
+.mobile-bar,
+.whiteBackground,
+.background-color-white,
+.table-responsive,
+.panel,
+.panel-default,
+.panel-group .panel,
+.panel-body,
+.panel-inna-dashboard,
+.inna-panel,
+.modal_container,
+.tooltip,
+.popover,
+.fc-popover {
+  background-color: var(--iac-surface-1) !important;
+  color: var(--iac-text) !important;
+  border-color: var(--iac-border) !important;
+}
+
+.navbar,
+.navbar-default,
+.navbar-default .navbar-collapse,
+.navbar-default .navbar-form,
+.nav-bar,
+header.inna-header,
+.panel-default > .panel-heading,
+.panel-heading,
+.panel-heading-with-subtitle,
+.panel-heading-title,
+.panel-heading-subtitle,
+.fc-toolbar.fc-header-toolbar,
+.calendar .fc-head-container,
+.calendar .fc-widget-header {
+  background: linear-gradient(180deg, var(--iac-surface-3), var(--iac-surface-2)) !important;
+  color: var(--iac-text) !important;
+  border-color: var(--iac-border) !important;
+}
+
+.panel,
+.panel-default,
+.panel-inna-dashboard,
+.inna-panel,
+.fc-popover,
+.dropdown-menu,
+#inna-att-panel {
+  box-shadow: var(--iac-shadow-soft) !important;
+  border-radius: 10px !important;
+}
+
+#inna-att-panel {
+  background: var(--iac-surface-2) !important;
+  border: 1px solid var(--iac-border) !important;
+}
+
+#inna-att-status {
+  color: var(--iac-text-muted) !important;
+}
+
+.navbar-text,
+.navbar-default .navbar-brand,
+.navbar-default .navbar-link,
+.navbar-link,
+.panel-title,
+.panel-heading-title,
+.panel-heading-subtitle,
+.panel-body,
+.table,
+.table td,
+.table th,
+.title,
+.small,
+label,
+.scaleTitle,
+.scaleValue,
+.midtermSummary,
+.inna-font-regular {
+  color: var(--iac-text) !important;
+}
+
+.text-muted,
+.navbar-default .navbar-nav > li > a,
+.navbar-default .navbar-text,
+.panel-heading-bubble,
+.dateTwoLines,
+.month,
+.day,
+.dropdown-menu > li > a small,
+.fc-time,
+.fc-axis,
+.fc-day-header,
+.fc-center h2 {
+  color: var(--iac-text-muted) !important;
+}
+
+a,
+.navbar-link,
+.dropdown-menu > li > a,
+.examNameLink,
+.projectNameLink,
+.inna-linklist a {
+  color: var(--iac-primary) !important;
+}
+
+a:hover,
+a:focus,
+.navbar-link:hover,
+.dropdown-menu > li > a:hover,
+.dropdown-menu > li > a:focus {
+  color: var(--iac-primary-hover) !important;
+}
+
+.dropdown-menu {
+  background-color: var(--iac-surface-2) !important;
+  border: 1px solid var(--iac-border) !important;
+  box-shadow: var(--iac-shadow-strong) !important;
+}
+
+.dropdown-menu > li > a {
+  background: transparent !important;
+}
+
+.dropdown-menu > li > a:hover,
+.dropdown-menu > li > a:focus {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+input,
+select,
+textarea,
+.form-control,
+.input-group .form-control,
+.input-inna-blue-2 {
+  background: var(--iac-surface-3) !important;
+  color: var(--iac-text) !important;
+  border: 1px solid var(--iac-border) !important;
+  box-shadow: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--iac-text-faint) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.form-control:focus {
+  border-color: var(--iac-primary) !important;
+  box-shadow: 0 0 0 3px var(--iac-primary-soft) !important;
+}
+
+button,
+.btn,
+.statisticsButton,
+.historyButton,
+.shrinkButtonMD,
+#inna-att-refresh-btn {
+  background: var(--iac-surface-3) !important;
+  color: var(--iac-text) !important;
+  border: 1px solid var(--iac-border) !important;
+}
+
+button:hover,
+.btn:hover,
+.statisticsButton:hover,
+.historyButton:hover,
+.shrinkButtonMD:hover,
+#inna-att-refresh-btn:hover {
+  background: #2a3a4e !important;
+  color: #f0f6fc !important;
+}
+
+.btn-primary,
+button.primary,
+#collapseStudentGrades .statisticsButton {
+  background: var(--iac-primary) !important;
+  border-color: transparent !important;
+  color: #0b1928 !important;
+}
+
+.btn-primary:hover,
+button.primary:hover,
+#collapseStudentGrades .statisticsButton:hover {
+  background: var(--iac-primary-hover) !important;
+}
+
+.table,
+.table > thead > tr > th,
+.table > tbody > tr > th,
+.table > tfoot > tr > th,
+.table > thead > tr > td,
+.table > tbody > tr > td,
+.table > tfoot > tr > td,
+.inna-panel-table,
+.inna-panel-table td,
+.inna-panel-table th,
+.inna-assignment-table,
+.inna-assignment-table td,
+.inna-assignment-table th {
+  border-color: var(--iac-border-soft) !important;
+  color: var(--iac-text) !important;
+}
+
+.table,
+.inna-panel-table,
+.inna-assignment-table,
+.calendar .fc-view,
+.calendar .fc-view-container,
+.calendar .fc-time-grid-container,
+.calendar .fc-bg,
+.calendar .fc-slats,
+.calendar .fc-time-grid,
+.calendar .fc-content-skeleton {
+  background: var(--iac-surface-1) !important;
+}
+
+.table > thead > tr > th,
+.inna-assignment-table > thead > tr > th,
+.inna-panel-table > thead > tr > th,
+.calendar .fc-head,
+.calendar .fc-day-header,
+.calendar .fc-axis {
+  background: var(--iac-surface-2) !important;
+}
+
+.table > tbody > tr > td,
+.inna-assignment-table > tbody > tr > td,
+.inna-panel-table > tbody > tr > td,
+.calendar .fc-widget-content,
+.calendar .fc-slats td,
+.calendar .fc-day,
+.calendar .fc-bg td {
+  background: transparent !important;
+}
+
+.table-hover > tbody > tr:hover,
+.table-hover > tbody > tr:hover > td,
+.inna-assignment-table > tbody > tr:hover,
+.inna-assignment-table > tbody > tr:hover > td,
+.inna-panel-table > tbody > tr:hover,
+.inna-panel-table > tbody > tr:hover > td {
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+.panel-inna-dashboard,
+.panel-inna-dashboard-green-1,
+.panel-inna-dashboard-green-2,
+.panel-inna-dashboard-blue-1,
+.panel-inna-dashboard-blue-2,
+.panel-inna-dashboard-orange-1,
+.panel-inna-dashboard-orange-2,
+.panel-inna-dashboard-purple-1 {
+  border: 1px solid var(--iac-border) !important;
+  background: var(--iac-surface-1) !important;
+}
+
+.inna-panel.bg-orange > .panel-heading,
+.bg-orange > .panel-heading {
+  background: linear-gradient(180deg, #b16c1f, #91591b) !important;
+}
+
+.inna-panel.bg-lime > .panel-heading,
+.bg-lime > .panel-heading {
+  background: linear-gradient(180deg, #6f8f2b, #5b7524) !important;
+}
+
+.inna-panel.bg-orange .panel-body,
+.inna-panel.bg-lime .panel-body {
+  border-left-color: var(--iac-border) !important;
+}
+
+.calendar .fc-button,
+.calendar .fc-button.fc-state-default,
+.calendar .fc-state-default {
+  background: var(--iac-surface-3) !important;
+  border-color: var(--iac-border) !important;
+  color: var(--iac-text) !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.calendar .fc-button:hover,
+.calendar .fc-button.fc-state-hover,
+.calendar .fc-state-default:hover {
+  background: #2a3a4e !important;
+}
+
+.calendar .fc-button.fc-state-active,
+.calendar .fc-state-active {
+  background: var(--iac-primary) !important;
+  border-color: transparent !important;
+  color: #08131f !important;
+}
+
+.calendar .fc-today,
+.calendar .fc-day.fc-today {
+  background: rgba(78, 161, 255, 0.08) !important;
+}
+
+.calendar .fc-time-grid-event,
+.calendar .fc-event {
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+.calendar .fc-time-grid-event .fc-content,
+.calendar .fc-event .fc-content {
+  color: #f8fbff !important;
+}
+
+.tooltip-inner {
+  background: var(--iac-surface-3) !important;
+  color: var(--iac-text) !important;
+  border: 1px solid var(--iac-border) !important;
+}
+
+.Toastify__toast,
+.Toastify__toast-theme--light {
+  background: var(--iac-surface-2) !important;
+  color: var(--iac-text) !important;
+  border: 1px solid var(--iac-border) !important;
+}
+
+hr {
+  border-color: var(--iac-border) !important;
+}
+
+.success {
+  color: var(--iac-success) !important;
+}
+
+.warning {
+  color: var(--iac-warning) !important;
+}
+
+.error,
+.danger {
+  color: var(--iac-danger) !important;
+}

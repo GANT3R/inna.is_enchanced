@@ -1,5 +1,13 @@
+const THEME_DEFAULT = "default";
+const THEME_NEW = "new";
+const LUNCH_ROW_REDUCTION_MIN = 0;
+const LUNCH_ROW_REDUCTION_MAX = 30;
+const LUNCH_ROW_REDUCTION_DEFAULT = 0;
+
 const DEFAULT_SETTINGS = {
   language: "en",
+  theme: THEME_DEFAULT,
+  lunchRowReductionPercent: LUNCH_ROW_REDUCTION_DEFAULT,
   presentColor: "#22c55e",
   absentColor: "#ef4444"
 };
@@ -7,8 +15,13 @@ const DEFAULT_SETTINGS = {
 const TEXT = {
   en: {
     pageTitle: "Attendance settings",
-    pageSubtitle: "Choose interface language and attendance colors.",
+    pageSubtitle: "Choose interface language, theme, and attendance colors.",
     languageLabel: "Language",
+    themeLabel: "Theme",
+    themeDefaultOption: "Default",
+    themeNewOption: "New color scheme",
+    lunchRowReductionLabel: "Lunch row size reduction",
+    lunchRowReductionValue: "{value}% smaller",
     presentColorLabel: "Positive attendance color",
     absentColorLabel: "Negative attendance color",
     previewPresent: "Positive attendance preview",
@@ -19,21 +32,29 @@ const TEXT = {
     resetDone: "Defaults restored."
   },
   is: {
-    pageTitle: "Stillingar fyrir mætingu",
-    pageSubtitle: "Veldu tungumál viðmóts og liti fyrir mætingu.",
-    languageLabel: "Tungumál",
-    presentColorLabel: "Litur fyrir jákvæða mætingu",
-    absentColorLabel: "Litur fyrir neikvæða mætingu",
-    previewPresent: "Forskoðun jákvæðrar mætingar",
-    previewAbsent: "Forskoðun neikvæðrar mætingar",
+    pageTitle: "Stillingar fyrir m\u00E6tingu",
+    pageSubtitle: "Veldu tungum\u00E1l vi\u00F0m\u00F3ts, \u00FEema og liti fyrir m\u00E6tingu.",
+    languageLabel: "Tungum\u00E1l",
+    themeLabel: "\u00DEema",
+    themeDefaultOption: "Sj\u00E1lfgefi\u00F0",
+    themeNewOption: "N\u00FDtt lita\u00FEema",
+    lunchRowReductionLabel: "Minnkun \u00E1 st\u00E6r\u00F0 h\u00E1degishl\u00E9s",
+    lunchRowReductionValue: "{value}% minni",
+    presentColorLabel: "Litur fyrir j\u00E1kv\u00E6\u00F0a m\u00E6tingu",
+    absentColorLabel: "Litur fyrir neikv\u00E6\u00F0a m\u00E6tingu",
+    previewPresent: "Forsko\u00F0un j\u00E1kv\u00E6\u00F0rar m\u00E6tingar",
+    previewAbsent: "Forsko\u00F0un neikv\u00E6\u00F0rar m\u00E6tingar",
     save: "Vista",
-    reset: "Endurstilla sjálfgefið",
-    saved: "Stillingar vistaðar.",
-    resetDone: "Sjálfgefnar stillingar endurheimtar."
+    reset: "Endurstilla sj\u00E1lfgefi\u00F0",
+    saved: "Stillingar vista\u00F0ar.",
+    resetDone: "Sj\u00E1lfgefnar stillingar endurheimtar."
   }
 };
 
 const languageEl = document.getElementById("language");
+const themeEl = document.getElementById("theme");
+const lunchRowReductionEl = document.getElementById("lunchRowReductionPercent");
+const lunchRowReductionValueEl = document.getElementById("lunchRowReductionValue");
 const presentColorEl = document.getElementById("presentColor");
 const absentColorEl = document.getElementById("absentColor");
 const statusEl = document.getElementById("status");
@@ -41,6 +62,10 @@ const statusEl = document.getElementById("status");
 const pageTitleEl = document.getElementById("pageTitle");
 const pageSubtitleEl = document.getElementById("pageSubtitle");
 const languageLabelEl = document.getElementById("languageLabel");
+const themeLabelEl = document.getElementById("themeLabel");
+const themeDefaultOptionEl = document.getElementById("themeDefaultOption");
+const themeNewOptionEl = document.getElementById("themeNewOption");
+const lunchRowReductionLabelEl = document.getElementById("lunchRowReductionLabel");
 const presentColorLabelEl = document.getElementById("presentColorLabel");
 const absentColorLabelEl = document.getElementById("absentColorLabel");
 const previewPresentEl = document.getElementById("previewPresent");
@@ -60,6 +85,15 @@ languageEl.addEventListener("change", () => {
   clearStatus();
 });
 
+themeEl.addEventListener("change", () => {
+  clearStatus();
+});
+
+lunchRowReductionEl.addEventListener("input", () => {
+  renderLunchRowReductionValue(languageEl.value);
+  clearStatus();
+});
+
 presentColorEl.addEventListener("input", () => {
   renderPreview();
   clearStatus();
@@ -73,6 +107,8 @@ absentColorEl.addEventListener("input", () => {
 saveBtn.addEventListener("click", async () => {
   const settings = sanitizeSettings({
     language: languageEl.value,
+    theme: themeEl.value,
+    lunchRowReductionPercent: lunchRowReductionEl.value,
     presentColor: presentColorEl.value,
     absentColor: absentColorEl.value
   });
@@ -92,8 +128,11 @@ resetBtn.addEventListener("click", async () => {
 
 function fillForm(settings) {
   languageEl.value = settings.language;
+  themeEl.value = settings.theme;
+  lunchRowReductionEl.value = String(settings.lunchRowReductionPercent);
   presentColorEl.value = settings.presentColor;
   absentColorEl.value = settings.absentColor;
+  renderLunchRowReductionValue(settings.language);
   renderPreview();
 }
 
@@ -105,12 +144,24 @@ function renderText(language) {
   pageTitleEl.textContent = t.pageTitle;
   pageSubtitleEl.textContent = t.pageSubtitle;
   languageLabelEl.textContent = t.languageLabel;
+  themeLabelEl.textContent = t.themeLabel;
+  themeDefaultOptionEl.textContent = t.themeDefaultOption;
+  themeNewOptionEl.textContent = t.themeNewOption;
+  lunchRowReductionLabelEl.textContent = t.lunchRowReductionLabel;
   presentColorLabelEl.textContent = t.presentColorLabel;
   absentColorLabelEl.textContent = t.absentColorLabel;
   previewPresentEl.textContent = t.previewPresent;
   previewAbsentEl.textContent = t.previewAbsent;
   saveBtn.textContent = t.save;
   resetBtn.textContent = t.reset;
+  renderLunchRowReductionValue(lang);
+}
+
+function renderLunchRowReductionValue(language) {
+  const lang = language === "is" ? "is" : "en";
+  const t = TEXT[lang];
+  const value = normalizeLunchRowReductionPercent(lunchRowReductionEl.value);
+  lunchRowReductionValueEl.textContent = t.lunchRowReductionValue.replace("{value}", String(value));
 }
 
 function renderPreview() {
@@ -145,9 +196,27 @@ function storageSet(values) {
 function sanitizeSettings(raw) {
   return {
     language: raw?.language === "is" ? "is" : "en",
+    theme: normalizeTheme(raw?.theme),
+    lunchRowReductionPercent: normalizeLunchRowReductionPercent(
+      raw?.lunchRowReductionPercent ?? raw?.lunchRowStyle
+    ),
     presentColor: normalizeHexColor(raw?.presentColor, DEFAULT_SETTINGS.presentColor),
     absentColor: normalizeHexColor(raw?.absentColor, DEFAULT_SETTINGS.absentColor)
   };
+}
+
+function normalizeTheme(value) {
+  return value === THEME_NEW ? THEME_NEW : THEME_DEFAULT;
+}
+
+function normalizeLunchRowReductionPercent(value) {
+  if (value === "compact") return LUNCH_ROW_REDUCTION_MAX;
+  if (value === "normal") return LUNCH_ROW_REDUCTION_DEFAULT;
+
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return LUNCH_ROW_REDUCTION_DEFAULT;
+
+  return Math.min(LUNCH_ROW_REDUCTION_MAX, Math.max(LUNCH_ROW_REDUCTION_MIN, parsed));
 }
 
 function normalizeHexColor(value, fallback) {

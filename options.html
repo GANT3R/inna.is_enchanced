@@ -67,6 +67,16 @@
       font-size: 14px;
     }
 
+    input[type="range"] {
+      width: 100%;
+      accent-color: #374151;
+    }
+
+    .range-value {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
     .actions {
       display: flex;
       gap: 12px;
@@ -135,8 +145,22 @@
           <label for="language" id="languageLabel"></label>
           <select id="language">
             <option value="en">English</option>
-            <option value="is">Íslenska</option>
+            <option value="is">&#205;slenska</option>
           </select>
+        </div>
+
+        <div class="field">
+          <label for="theme" id="themeLabel"></label>
+          <select id="theme">
+            <option value="default" id="themeDefaultOption"></option>
+            <option value="new" id="themeNewOption"></option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="lunchRowReductionPercent" id="lunchRowReductionLabel"></label>
+          <input id="lunchRowReductionPercent" type="range" min="0" max="30" step="1">
+          <div class="range-value" id="lunchRowReductionValue"></div>
         </div>
 
         <div class="field">
