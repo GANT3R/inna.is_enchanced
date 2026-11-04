@@ -1,35 +1,53 @@
 {
   "manifest_version": 3,
   "name": "Inna Enhanced",
-  "version": "3.3",
-  "description": "Syncs attendance into nam.inna.is timetable, highlights classes, and shows lunch and long free-time gaps.",
+  "version": "3.4.0",
+  "description": "Enhances INNA timetable with attendance highlights, lunch breaks, and free-time gaps.",
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
       "48": "icons/icon48.png",
+      "64": "icons/icon64.png",
       "128": "icons/icon128.png"
     }
   },
   "content_scripts": [
     {
-      "matches": ["https://nam.inna.is/Components/Students/Students.html*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://nam.inna.is/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "host_permissions": [
     "https://nam.inna.is/*"
   ],
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "web_accessible_resources": [
     {
-      "resources": ["new_theme.css"],
-      "matches": ["https://nam.inna.is/*"]
+      "resources": [
+        "new_theme.css"
+      ],
+      "matches": [
+        "https://nam.inna.is/*"
+      ]
     }
   ],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "64": "icons/icon64.png",
+    "128": "icons/icon128.png"
   }
 }

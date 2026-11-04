@@ -2,9 +2,10 @@ const GREEN_CODES = new Set(["M", "X", "O"]);
 const RED_CODES = new Set(["F", "V", "E"]);
 const VALID_ATTENDANCE_CODES = new Set([...GREEN_CODES, ...RED_CODES]);
 
-const DASHBOARD_HASHES = new Set(["#/", "#", ""]);
+const DASHBOARD_HASHES = new Set(["#/", "#", "", "#/Home", "#/Dashboard", "#/Timetable", "#/Schedule"]);
 const ATTENDANCE_HASH = "#/AttendanceOverview";
 const ATTENDANCE_PAGE_BASE = "https://nam.inna.is/Components/Students/Students.html";
+// FullCalendar weekday columns are identified by their data-date values.
 
 const MAX_AUTO_RETRIES = 4;
 const AUTO_RETRY_DELAY = 1600;
@@ -147,12 +148,19 @@ async function init() {
 
   scheduleRun("init", false, 800);
 
+  window.addEventListener("popstate", () => {
+    ensureRefreshPanel();
+    refreshObserverRoot();
+    scheduleRun("history-navigation", false, 700);
+  });
+
   window.addEventListener("hashchange", () => {
     ensureRefreshPanel();
     refreshObserverRoot();
 
     if (!isOnDashboard()) return;
 
+    unlockIfDisplayedDayChanged();
     if (cachedAttendance) {
       scheduleUiSync("hashchange-cache");
     }
@@ -231,7 +239,8 @@ function bindStorageListener() {
 }
 
 function isOnDashboard() {
-  return DASHBOARD_HASHES.has(location.hash || "#/");
+  const hash = (location.hash || "#/ ").trim();
+  return DASHBOARD_HASHES.has(hash) || /#\/(?:home|dashboard|timetable|schedule)(?:[/?]|$)/i.test(hash);
 }
 
 function scheduleRun(reason, forceManual = false, delay = RUN_DEBOUNCE_MS) {
@@ -296,7 +305,7 @@ async function run(reason = "manual", forceManual = false) {
 
     const snapshot = await loadAttendanceSnapshot(todayInfo, forceManual);
 
-    if (!snapshot.ready || !snapshot.text.length) {
+    if (!snapshot.ready || (!snapshot.lessons && !snapshot.cached && !snapshot.text?.length)) {
       setRowsIdle(dashboardRows);
 
       if (!forceManual && cachedAttendance && canUseCachedAttendance(todayInfo)) {
@@ -325,7 +334,9 @@ async function run(reason = "manual", forceManual = false) {
       return;
     }
 
-    const parsed = buildAttendanceDataFromText(snapshot.text, todayInfo, dashboardRows);
+    const parsed = snapshot.cached || (snapshot.lessons
+      ? buildAttendanceDataFromLessons(snapshot.lessons, todayInfo, dashboardRows, snapshot.text)
+      : buildAttendanceDataFromText(snapshot.text, todayInfo, dashboardRows));
 
     if (!parsed.lessons.length) {
       setRowsIdle(dashboardRows);
@@ -572,6 +583,10 @@ function injectBaseStyles() {
       cursor: wait;
     }
 
+    .inna-att-gap-row { display: flex; align-items: center; gap: 18px; min-height: 32px; padding: 8px 12px; }
+    tr.inna-att-gap-row { display: table-row; }
+    .inna-att-gap-row--free:not(tr) { background: rgba(148, 163, 184, 0.14) !important; }
+    .inna-att-gap-row--lunch:not(tr) { background: rgba(251, 191, 36, 0.18) !important; }
     .inna-att-gap-row--free > td,
     .inna-att-gap-row--free > [role="cell"] {
       background: rgba(148, 163, 184, 0.14) !important;
@@ -622,13 +637,13 @@ function applySettingsToCss() {
   const absent = settings.absentColor;
 
   style.textContent = `
-    .inna-att-green {
+    .inna-att-green, .inna-att-green > td {
       background: ${hexToRgba(present, 0.18)} !important;
       border-left: 4px solid ${present} !important;
       box-shadow: inset 0 0 0 9999px ${hexToRgba(present, 0.06)};
     }
 
-    .inna-att-red {
+    .inna-att-red, .inna-att-red > td {
       background: ${hexToRgba(absent, 0.18)} !important;
       border-left: 4px solid ${absent} !important;
       box-shadow: inset 0 0 0 9999px ${hexToRgba(absent, 0.06)};
@@ -682,6 +697,7 @@ function onObservedMutation(mutations) {
   if (!isOnDashboard()) return;
   if (mutationsAreOnlyOurUi(mutations)) return;
 
+  unlockIfDisplayedDayChanged();
   ensureRefreshPanel();
 
   if (cachedAttendance) {
@@ -719,6 +735,16 @@ function mutationsAreOnlyOurUi(mutations) {
   });
 }
 
+function unlockIfDisplayedDayChanged() {
+  const current = getDashboardDayInfo();
+  if (!current || !cachedAttendance) return;
+  if (cachedAttendance.dayKey !== makeDayKey(current)) {
+    autoParseLocked = false;
+    autoRetryCount = 0;
+    if (!activeRun) scheduleRun("displayed-day-changed", false, 350);
+  }
+}
+
 function applyCachedStateToCurrentLayout() {
   if (!cachedAttendance || !isOnDashboard()) return;
 
@@ -744,7 +770,7 @@ function applyCachedStateToCurrentLayout() {
 function ensureRefreshPanel() {
   if (!isOnDashboard()) return;
 
-  const timetableTable = findTimetableTable();
+  const timetableTable = findTimetableTable() || getDashboardLessonRows()[0]?.element?.parentElement;
   if (!timetableTable) return;
 
   let panel = document.getElementById("inna-att-panel");
@@ -789,48 +815,34 @@ function ensureRefreshPanel() {
 }
 
 function findTimetableHeader() {
-  const nodes = [...document.querySelectorAll("body *")];
-  for (const el of nodes) {
-    const text = normalizeText(el.textContent || "");
-    if (text === "Timetable" || text.startsWith("Timetable ")) {
-      return el;
-    }
-  }
-  return null;
+  const candidates = document.querySelectorAll(
+    ".panel-inna-dashboard .panel-heading-title, .panel-heading-title, h1,h2,h3,h4,[role='heading'],.card-header,.widget-title"
+  );
+  return [...candidates].find(el => /^(?:Timetable|Stundatafla|Schedule|Stundaskrá)/i.test(normalizeText(el.textContent))) || null;
 }
 
 function findTimetableModuleRoot() {
   const header = findTimetableHeader();
-  if (!header) return null;
-
-  let cur = header;
-  for (let i = 0; i < 8 && cur; i++) {
-    const text = normalizeText(cur.innerText || "");
-    if (text.includes("Timetable") && (cur.querySelector("table") || cur.closest("table"))) {
-      return cur;
+  if (header) {
+    const dashboard = header.closest(".panel-inna-dashboard");
+    if (dashboard?.querySelector("table.inna-panel-table")) return dashboard;
+    let cur = header;
+    for (let i = 0; i < 7 && cur; i++, cur = cur.parentElement) {
+      if (cur.querySelector("table, [role='table'], [role='grid']") ||
+          cur.querySelectorAll("[role='row'], .lesson-row, .timetable-row").length >= 2) return cur;
     }
-    cur = cur.parentElement;
   }
-
-  return header.parentElement || null;
+  return document.querySelector("[data-testid*='timetable' i], [class*='timetable-panel' i], [class*='stundatafla' i]");
 }
 
 function findTimetableTable() {
   const root = findTimetableModuleRoot();
-  if (root) {
-    const table = root.querySelector("table");
-    if (table) return table;
-  }
-
-  const tables = [...document.querySelectorAll("table")];
-  for (const table of tables) {
-    const text = normalizeText(table.innerText || "");
-    if (/\b\d{1,2}:\d{2}\b/.test(text) && /\([0-9]+\)/.test(text)) {
-      return table;
-    }
-  }
-
-  return null;
+  if (!root) return null;
+  const tables = [...root.querySelectorAll("table, [role='table'], [role='grid']")];
+  return tables.find(table => {
+    const text = normalizeText(table.innerText || table.textContent || "");
+    return /\b\d{1,2}:\d{2}\b/.test(text) && /[A-ZÁÉÍÓÚÝÞÆÖÐ]{2,}\d/i.test(text);
+  }) || null;
 }
 
 async function manualRefresh() {
@@ -900,37 +912,77 @@ async function navigateIframe(iframe, url) {
 
 async function loadAttendanceSnapshot(todayInfo, forceManual = false) {
   const iframe = await ensureAttendanceIframe(forceManual);
-  const dayKey = makeDayKey(todayInfo);
-
   for (let attempt = 1; attempt <= SNAPSHOT_ATTEMPTS; attempt++) {
+    let doc = null;
+    try { doc = iframe.contentDocument; } catch { /* Access denied until loaded */ }
+    const calendar = doc?.querySelector(".fc-time-grid, .fc-view");
+    const parsed = calendar ? parseFullCalendarAttendance(doc, todayInfo) : null;
+    if (parsed?.dateFound && parsed.lessons.length) {
+      return { ready: true, lessons: parsed.lessons, text: getIframeNormalizedText(iframe), source: "calendar-dom" };
+    }
+    // Legacy layouts may expose text rather than FullCalendar; never fall back
+    // to text if a calendar is present for a different date/week.
     const text = getIframeNormalizedText(iframe);
-
-    if (isAttendanceTextReady(text)) {
-      return { ready: true, text, source: "live" };
+    if (!calendar && isAttendanceTextReady(text)) {
+      return { ready: true, text, source: "legacy-text" };
     }
-
-    if (attempt === 8 || attempt === 16) {
-      try {
-        await navigateIframe(iframe, buildAttendanceUrl(true));
-      } catch {}
+    if (attempt === 10 || attempt === 19) {
+      try { await navigateIframe(iframe, buildAttendanceUrl(true)); } catch {}
     }
-
     await sleep(SNAPSHOT_POLL_MS);
   }
-
-  if (!forceManual && cachedAttendance && cachedAttendance.dayKey === dayKey) {
-    return {
-      ready: true,
-      text: cachedAttendance.fullText,
-      source: "cache-fallback"
-    };
+  if (!forceManual && cachedAttendance && cachedAttendance.dayKey === makeDayKey(todayInfo)) {
+    return { ready: true, cached: cachedAttendance, source: "cache-fallback" };
   }
+  return { ready: false, text: getIframeNormalizedText(iframe), source: "not-ready" };
+}
 
-  return {
-    ready: false,
-    text: getIframeNormalizedText(iframe),
-    source: "empty"
-  };
+// In FullCalendar's agendaWeek view each fc-content-skeleton table cell
+// corresponds to the day header with the same column position. The first
+// column is the time axis; dates are read from actual data-date attributes.
+function parseFullCalendarAttendance(doc, todayInfo) {
+  const headers = [...doc.querySelectorAll(".fc-day-header[data-date]")];
+  const target = `${todayInfo.dayNum}/${todayInfo.monthNum}`;
+  const targetHeader = headers.find(el => {
+    const date = el.getAttribute("data-date") || "";
+    const m = date.match(/^\d{4}-(\d{2})-(\d{2})$/);
+    return m && `${m[2]}/${m[1]}` === target;
+  });
+  if (!targetHeader) return { dateFound: false, lessons: [] };
+  const date = targetHeader.getAttribute("data-date");
+  const index = headers.indexOf(targetHeader);
+  const view = targetHeader.closest(".fc-view") || doc;
+  const skeletons = [...view.querySelectorAll(".fc-time-grid .fc-content-skeleton")];
+  const lessons = [];
+  for (const skeleton of skeletons) {
+    const columnCells = [...skeleton.querySelectorAll(":scope > table > tbody > tr > td")];
+    // FullCalendar layouts use an extra first cell for the time axis.
+    const column = columnCells.length === headers.length + 1
+      ? columnCells[index + 1] : columnCells[index];
+    if (!column) continue;
+    for (const event of column.querySelectorAll(".fc-time-grid-event")) {
+      const content = event.querySelector(".fc-content") || event;
+      const range = normalizeText(content.querySelector(".fc-time")?.textContent || "")
+        .match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
+      if (!range) continue;
+      const copy = content.cloneNode(true);
+      copy.querySelector(".fc-time")?.remove();
+      // Avoid including icon title/teacher information in the status match.
+      const courseText = normalizeText(copy.textContent || "");
+      const match = courseText.match(/([A-ZÁÉÍÓÚÝÞÆÖÐ][A-ZÁÉÍÓÚÝÞÆÖÐ0-9]+)\s*[-–]\s*(\d+)(?:\s+([A-ZÁÉÍÓÚÝÞÆÖÐ]))?(?:\s|$)/iu);
+      if (!match) continue;
+      const rawStatus = match[3]?.toUpperCase() || null;
+      lessons.push({
+        date,
+        start: normalizeTime(range[1]),
+        end: normalizeTime(range[2]),
+        code: normalizeCode(match[1]),
+        group: match[2],
+        status: VALID_ATTENDANCE_CODES.has(rawStatus) ? rawStatus : null
+      });
+    }
+  }
+  return { dateFound: true, lessons };
 }
 
 function getIframeNormalizedText(iframe) {
@@ -957,45 +1009,45 @@ function isAttendanceTextReady(text) {
 }
 
 function getDashboardDayInfo() {
-  const text = normalizeText(document.body.innerText);
-  const m = text.match(/\b(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY)\s+(\d{2})\.(\d{2})\b/i);
-  if (!m) return null;
-
-  return {
-    dayName: capitalize(m[1].toLowerCase()),
-    dayNum: m[2],
-    monthNum: m[3]
-  };
+  const root = findTimetableModuleRoot() || document.body;
+  const subtitle = root.querySelector(".panel-heading-subtitle");
+  const text = normalizeText(subtitle?.textContent || root.innerText || "");
+  const days = { monday:"Monday", tuesday:"Tuesday", wednesday:"Wednesday", thursday:"Thursday", friday:"Friday",
+    mánudagur:"Monday", þriðjudagur:"Tuesday", miðvikudagur:"Wednesday", fimmtudagur:"Thursday", föstudagur:"Friday",
+    mán:"Monday", þri:"Tuesday", mið:"Wednesday", fim:"Thursday", fös:"Friday" };
+  const re = /\b(monday|tuesday|wednesday|thursday|friday|mánudagur|þriðjudagur|miðvikudagur|fimmtudagur|föstudagur|mán|þri|mið|fim|fös)\s+(\d{1,2})[./](\d{1,2})\b/iu;
+  const match = text.match(re);
+  if (match) return { dayName: days[match[1].toLowerCase()], dayNum: match[2].padStart(2,"0"), monthNum: match[3].padStart(2,"0") };
+  // Do not guess the displayed day: coloring the wrong date is worse than leaving rows uncolored.
+  return null;
 }
 
 function getDashboardLessonRows() {
-  const anchors = [...document.querySelectorAll('a[href*="#/NewModules/"]')];
-
-  return anchors
-    .map(a => {
-      const row = a.closest("tr") || a.closest("[role='row']") || findUsefulContainer(a);
-      if (!row) return null;
-
-      const rowText = normalizeText(row.innerText || "");
-      const timeMatch = rowText.match(/(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})/);
-      const codeMatch = normalizeText(a.innerText).match(
-        /([A-Z\u00C1\u00C9\u00CD\u00D3\u00DA\u00DD\u00DE\u00C6\u00D60-9]+)\s*\(\s*(\d+)\s*\)/u
-      );
-
-      if (!timeMatch || !codeMatch) return null;
-
-      const timeCell = findLikelyTimeCell(row);
-
-      return {
-        element: row,
-        timeCell,
-        start: normalizeTime(timeMatch[1]),
-        end: normalizeTime(timeMatch[2]),
-        code: normalizeCode(codeMatch[1]),
-        group: codeMatch[2]
-      };
-    })
-    .filter(Boolean);
+  const root = findTimetableModuleRoot() || document;
+  const courseRe = /([A-ZÁÉÍÓÚÝÞÆÖÐ]{2,}[A-ZÁÉÍÓÚÝÞÆÖÐ0-9]*)\s*(?:\(\s*(\d+)\s*\)|[-–]\s*(\d+))/iu;
+  const timeRe = /(\d{1,2}:\d{2})\s*(?:[-–—]|\s+)\s*(\d{1,2}:\d{2})/;
+  const candidates = [...root.querySelectorAll("tr, [role='row'], .lesson-row, .timetable-row, [data-testid*='lesson' i], [class*='lesson-item' i]")];
+  // Keep old course-link support for tables whose rows lack a stable class.
+  for (const a of root.querySelectorAll('a[href*="#/NewModules/"], a[href*="course" i]')) {
+    const row = a.closest("tr,[role='row'],.lesson-row,.timetable-row") || findUsefulContainer(a);
+    if (row && !candidates.includes(row)) candidates.push(row);
+  }
+  const seen = new Set();
+  return candidates.map(row => {
+    if (row.closest("#inna-att-panel, #inna-attendance-hidden-frame") || row.classList.contains("inna-att-gap-row")) return null;
+    const text = normalizeText(row.innerText || "");
+    const time = text.match(timeRe);
+    const course = text.match(courseRe);
+    if (!time || !course) return null;
+    const start = normalizeTime(time[1]);
+    const end = normalizeTime(time[2]);
+    if (parseTimeToMinutes(end) <= parseTimeToMinutes(start)) return null;
+    const key = [start,end,course[1],course[2] || course[3]].join("|");
+    if (seen.has(key)) return null;
+    seen.add(key);
+    const timeCell = findLikelyTimeCell(row);
+    return { element:row, timeCell, start, end, code:normalizeCode(course[1]), group:course[2] || course[3] };
+  }).filter(Boolean).sort((a,b) => parseTimeToMinutes(a.start)-parseTimeToMinutes(b.start));
 }
 
 function syncDashboardGapRows(rows) {
@@ -1020,12 +1072,29 @@ function syncDashboardGapRows(rows) {
     if (gapStartMinutes === null || gapEndMinutes === null) continue;
     if (gapEndMinutes <= gapStartMinutes) continue;
 
-    const gapMinutes = gapEndMinutes - gapStartMinutes;
-    const gapKind = classifyGapKind(gapStartMinutes, gapEndMinutes);
-    if (!gapKind) continue;
-
-    const gapRow = buildDashboardGapRow(current.element, gapStart, gapEnd, gapMinutes, gapKind);
-    if (gapRow) current.element.insertAdjacentElement("afterend", gapRow);
+    // Preserve a distinct lunch row when a longer free period surrounds lunch.
+    const segments = [];
+    if (gapStartMinutes <= LUNCH_GAP_START_MINUTES && gapEndMinutes >= LUNCH_GAP_END_MINUTES) {
+      if (LUNCH_GAP_START_MINUTES - gapStartMinutes >= MIN_FREE_GAP_MINUTES) {
+        segments.push([gapStartMinutes, LUNCH_GAP_START_MINUTES, "free"]);
+      }
+      segments.push([LUNCH_GAP_START_MINUTES, LUNCH_GAP_END_MINUTES, "lunch"]);
+      if (gapEndMinutes - LUNCH_GAP_END_MINUTES >= MIN_FREE_GAP_MINUTES) {
+        segments.push([LUNCH_GAP_END_MINUTES, gapEndMinutes, "free"]);
+      }
+    } else {
+      const kind = classifyGapKind(gapStartMinutes, gapEndMinutes);
+      if (kind) segments.push([gapStartMinutes, gapEndMinutes, kind]);
+    }
+    let insertionAnchor = current.element;
+    for (const [start, end, kind] of segments) {
+      const gapRow = buildDashboardGapRow(current.element,
+        minutesToTime(start), minutesToTime(end), end - start, kind);
+      if (gapRow) {
+        insertionAnchor.insertAdjacentElement("afterend", gapRow);
+        insertionAnchor = gapRow;
+      }
+    }
   }
 }
 
@@ -1049,7 +1118,17 @@ function buildDashboardGapRow(referenceRow, startTime, endTime, gapMinutes, gapK
   row.querySelectorAll(".inna-att-indicator").forEach(node => node.remove());
 
   const cells = row.querySelectorAll("td, [role='cell']");
-  if (!cells.length) return null;
+  if (!cells.length) {
+    row.replaceChildren();
+    const time = document.createElement("span");
+    time.className = "inna-att-gap-time";
+    time.textContent = `${startTime} – ${endTime}`;
+    const label = document.createElement("span");
+    label.className = "inna-att-gap-label";
+    label.textContent = `${tr(gapKind === "lunch" ? "lunchGapLabel" : "freeGapLabel")} (${formatGapDuration(gapMinutes)})`;
+    row.append(time, label);
+    return row;
+  }
 
   const timeCell = cells[0];
   timeCell.classList.remove("inna-att-time-cell");
@@ -1067,6 +1146,10 @@ function buildDashboardGapRow(referenceRow, startTime, endTime, gapMinutes, gapK
   }
 
   return row;
+}
+
+function minutesToTime(value) {
+  return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 }
 
 function parseTimeToMinutes(value) {
@@ -1114,6 +1197,19 @@ function findLikelyTimeCell(row) {
   const cells = row.querySelectorAll("td, [role='cell']");
   if (cells?.[0]) return cells[0];
   return row.firstElementChild || row;
+}
+
+function buildAttendanceDataFromLessons(lessons, todayInfo, dashboardRows, fullText = "") {
+  const dayKey = makeDayKey(todayInfo);
+  const map = buildAttendanceMap(todayInfo, dashboardRows, lessons);
+  return {
+    dayKey,
+    textHash: hashString(JSON.stringify(lessons)),
+    fullText: normalizeText(fullText),
+    dayChunk: "",
+    lessons,
+    map
+  };
 }
 
 function buildAttendanceDataFromText(fullText, todayInfo, dashboardRows) {
