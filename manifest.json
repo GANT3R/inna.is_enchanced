@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Inna Enhanced",
-  "version": "3.4.0",
-  "description": "Enhances INNA timetable with attendance highlights, lunch breaks, and free-time gaps.",
+  "version": "3.5.0",
+  "description": "Enhances INNA timetable with attendance highlights, lunch breaks, free-time gaps, and teacher absence handling.",
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",

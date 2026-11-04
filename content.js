@@ -21,6 +21,8 @@ const LOG_ENABLED = true;
 
 const THEME_DEFAULT = "default";
 const THEME_NEW = "new";
+const TEACHER_ABSENCE_MODE_GRAY = "gray";
+const TEACHER_ABSENCE_MODE_FREE = "free";
 const LUNCH_ROW_REDUCTION_MIN = 0;
 const LUNCH_ROW_REDUCTION_MAX = 30;
 const LUNCH_ROW_REDUCTION_DEFAULT = 0;
@@ -32,7 +34,8 @@ const DEFAULT_SETTINGS = {
   theme: THEME_DEFAULT,
   lunchRowReductionPercent: LUNCH_ROW_REDUCTION_DEFAULT,
   presentColor: "#22c55e",
-  absentColor: "#ef4444"
+  absentColor: "#ef4444",
+  teacherAbsenceMode: TEACHER_ABSENCE_MODE_GRAY
 };
 
 const I18N = {
@@ -225,6 +228,11 @@ function bindStorageListener() {
       changed = true;
     }
 
+    if (changes.teacherAbsenceMode) {
+      next.teacherAbsenceMode = changes.teacherAbsenceMode.newValue;
+      changed = true;
+    }
+
     if (!changed) return;
 
     settings = sanitizeSettings(next);
@@ -289,7 +297,7 @@ async function run(reason = "manual", forceManual = false) {
     syncDashboardGapRows(dashboardRows);
 
     if (!forceManual && canUseCachedAttendance(todayInfo)) {
-      colorDashboardRows(todayInfo, dashboardRows, cachedAttendance.map);
+      renderAttendanceAndGaps(todayInfo, dashboardRows, cachedAttendance.map);
       setStatus("readyDetailedStatus", {
         matched: cachedAttendance.map.size,
         total: dashboardRows.length
@@ -309,7 +317,7 @@ async function run(reason = "manual", forceManual = false) {
       setRowsIdle(dashboardRows);
 
       if (!forceManual && cachedAttendance && canUseCachedAttendance(todayInfo)) {
-        colorDashboardRows(todayInfo, dashboardRows, cachedAttendance.map);
+        renderAttendanceAndGaps(todayInfo, dashboardRows, cachedAttendance.map);
         setStatus("restoredStatus", {
           matched: cachedAttendance.map.size,
           total: dashboardRows.length
@@ -342,7 +350,7 @@ async function run(reason = "manual", forceManual = false) {
       setRowsIdle(dashboardRows);
 
       if (!forceManual && cachedAttendance && canUseCachedAttendance(todayInfo)) {
-        colorDashboardRows(todayInfo, dashboardRows, cachedAttendance.map);
+        renderAttendanceAndGaps(todayInfo, dashboardRows, cachedAttendance.map);
         setStatus("restoredStatus", {
           matched: cachedAttendance.map.size,
           total: dashboardRows.length
@@ -368,7 +376,7 @@ async function run(reason = "manual", forceManual = false) {
     }
 
     cachedAttendance = parsed;
-    colorDashboardRows(todayInfo, dashboardRows, parsed.map);
+    renderAttendanceAndGaps(todayInfo, dashboardRows, parsed.map);
 
     setStatus("updatedStatus", {
       matched: parsed.map.size,
@@ -421,7 +429,8 @@ function sanitizeSettings(raw) {
       raw?.lunchRowReductionPercent ?? raw?.lunchRowStyle
     ),
     presentColor: normalizeHexColor(raw?.presentColor, DEFAULT_SETTINGS.presentColor),
-    absentColor: normalizeHexColor(raw?.absentColor, DEFAULT_SETTINGS.absentColor)
+    absentColor: normalizeHexColor(raw?.absentColor, DEFAULT_SETTINGS.absentColor),
+    teacherAbsenceMode: normalizeTeacherAbsenceMode(raw?.teacherAbsenceMode)
   };
 }
 
@@ -437,6 +446,10 @@ function normalizeLunchRowReductionPercent(value) {
   if (!Number.isFinite(parsed)) return LUNCH_ROW_REDUCTION_DEFAULT;
 
   return Math.min(LUNCH_ROW_REDUCTION_MAX, Math.max(LUNCH_ROW_REDUCTION_MIN, parsed));
+}
+
+function normalizeTeacherAbsenceMode(value) {
+  return value === TEACHER_ABSENCE_MODE_FREE ? TEACHER_ABSENCE_MODE_FREE : TEACHER_ABSENCE_MODE_GRAY;
 }
 
 function tr(key, vars = {}) {
@@ -618,6 +631,30 @@ function injectBaseStyles() {
       letter-spacing: 0.15px;
     }
 
+    .inna-att-teacher-absent,
+    .inna-att-teacher-absent > td,
+    .inna-att-teacher-absent > [role="cell"] {
+      background: rgba(148, 163, 184, 0.18) !important;
+      color: #5b6472 !important;
+      box-shadow: inset 0 0 0 9999px rgba(148, 163, 184, 0.08);
+    }
+    tr.inna-att-teacher-absent > td:first-child,
+    .inna-att-teacher-absent:not(tr) {
+      border-left: 4px solid #9ca3af !important;
+    }
+
+    .inna-att-teacher-absent td,
+    .inna-att-teacher-absent [role="cell"],
+    .inna-att-teacher-absent {
+      text-decoration: line-through;
+      text-decoration-thickness: 2px;
+      text-decoration-color: rgba(75, 85, 99, 0.85);
+    }
+
+    .inna-att-teacher-absent-hidden {
+      display: none !important;
+    }
+
     @keyframes inna-spin {
       to { transform: rotate(360deg); }
     }
@@ -637,16 +674,21 @@ function applySettingsToCss() {
   const absent = settings.absentColor;
 
   style.textContent = `
-    .inna-att-green, .inna-att-green > td {
+    .inna-att-green > td, .inna-att-green > [role="cell"],
+    .inna-att-green:not(tr) {
       background: ${hexToRgba(present, 0.18)} !important;
-      border-left: 4px solid ${present} !important;
       box-shadow: inset 0 0 0 9999px ${hexToRgba(present, 0.06)};
     }
-
-    .inna-att-red, .inna-att-red > td {
+    tr.inna-att-green > td:first-child, .inna-att-green:not(tr) {
+      border-left: 4px solid ${present} !important;
+    }
+    .inna-att-red > td, .inna-att-red > [role="cell"],
+    .inna-att-red:not(tr) {
       background: ${hexToRgba(absent, 0.18)} !important;
-      border-left: 4px solid ${absent} !important;
       box-shadow: inset 0 0 0 9999px ${hexToRgba(absent, 0.06)};
+    }
+    tr.inna-att-red > td:first-child, .inna-att-red:not(tr) {
+      border-left: 4px solid ${absent} !important;
     }
   `;
 }
@@ -754,13 +796,11 @@ function applyCachedStateToCurrentLayout() {
   if (!todayInfo) return;
   if (makeDayKey(todayInfo) !== cachedAttendance.dayKey) return;
 
-  removeDashboardGapRows();
   const rows = getDashboardLessonRows();
   if (!rows.length) return;
 
-  syncDashboardGapRows(rows);
+  renderAttendanceAndGaps(todayInfo, rows, cachedAttendance.map);
 
-  colorDashboardRows(todayInfo, rows, cachedAttendance.map);
   setStatus("readyDetailedStatus", {
     matched: cachedAttendance.map.size,
     total: rows.length
@@ -972,13 +1012,18 @@ function parseFullCalendarAttendance(doc, todayInfo) {
       const match = courseText.match(/([A-ZÁÉÍÓÚÝÞÆÖÐ][A-ZÁÉÍÓÚÝÞÆÖÐ0-9]+)\s*[-–]\s*(\d+)(?:\s+([A-ZÁÉÍÓÚÝÞÆÖÐ]))?(?:\s|$)/iu);
       if (!match) continue;
       const rawStatus = match[3]?.toUpperCase() || null;
+      const titleTexts = [...content.querySelectorAll('[title]')]
+        .map(node => normalizeText(node.getAttribute('title') || ''))
+        .filter(Boolean);
+      const teacherAbsent = titleTexts.some(title => /forföll\s+kennara|uppákomur\s+fs|teachers?\s+absence/i.test(title));
       lessons.push({
         date,
         start: normalizeTime(range[1]),
         end: normalizeTime(range[2]),
         code: normalizeCode(match[1]),
         group: match[2],
-        status: VALID_ATTENDANCE_CODES.has(rawStatus) ? rawStatus : null
+        status: VALID_ATTENDANCE_CODES.has(rawStatus) ? rawStatus : null,
+        teacherAbsent
       });
     }
   }
@@ -1318,29 +1363,62 @@ function buildAttendanceMap(todayInfo, dashboardRows, lessons) {
       lesson.group === row.group
     );
 
-    if (!match || !match.status) continue;
-    map.set(key, match.status);
+    if (!match) continue;
+
+    if (match.teacherAbsent) {
+      map.set(key, { type: "teacherAbsent" });
+      continue;
+    }
+
+    if (match.status) {
+      map.set(key, { type: "attendance", status: match.status });
+    }
   }
 
   return map;
 }
 
-function colorDashboardRows(todayInfo, rows, attendanceMap) {
+function renderAttendanceAndGaps(todayInfo, rows, attendanceMap) {
+  removeDashboardGapRows();
+  const visibleRows = applyDashboardAttendanceState(todayInfo, rows, attendanceMap);
+  syncDashboardGapRows(visibleRows);
+}
+
+function applyDashboardAttendanceState(todayInfo, rows, attendanceMap) {
+  const visibleRows = [];
+
   for (const row of rows) {
-    row.element.classList.remove("inna-att-green", "inna-att-red");
+    row.element.classList.remove("inna-att-green", "inna-att-red", "inna-att-teacher-absent", "inna-att-teacher-absent-hidden");
 
     const indicator = ensureRowIndicator(row.timeCell || row.element);
     const key = makeKey(todayInfo.dayName, row.start, row.end, row.code, row.group);
-    const status = attendanceMap.get(key);
+    const entry = attendanceMap.get(key);
 
     setIndicatorState(indicator, "hidden");
 
-    if (GREEN_CODES.has(status)) {
-      row.element.classList.add("inna-att-green");
-    } else if (RED_CODES.has(status)) {
-      row.element.classList.add("inna-att-red");
+    if (entry?.type === "teacherAbsent") {
+      if (settings.teacherAbsenceMode === TEACHER_ABSENCE_MODE_FREE) {
+        row.element.classList.add("inna-att-teacher-absent-hidden");
+        continue;
+      }
+
+      row.element.classList.add("inna-att-teacher-absent");
+      visibleRows.push(row);
+      continue;
     }
+
+    if (entry?.type === "attendance") {
+      if (GREEN_CODES.has(entry.status)) {
+        row.element.classList.add("inna-att-green");
+      } else if (RED_CODES.has(entry.status)) {
+        row.element.classList.add("inna-att-red");
+      }
+    }
+
+    visibleRows.push(row);
   }
+
+  return visibleRows;
 }
 
 function setRowsLoading(rows) {

@@ -1,5 +1,7 @@
 const THEME_DEFAULT = "default";
 const THEME_NEW = "new";
+const TEACHER_ABSENCE_MODE_GRAY = "gray";
+const TEACHER_ABSENCE_MODE_FREE = "free";
 const LUNCH_ROW_REDUCTION_MIN = 0;
 const LUNCH_ROW_REDUCTION_MAX = 30;
 const LUNCH_ROW_REDUCTION_DEFAULT = 0;
@@ -9,13 +11,14 @@ const DEFAULT_SETTINGS = {
   theme: THEME_DEFAULT,
   lunchRowReductionPercent: LUNCH_ROW_REDUCTION_DEFAULT,
   presentColor: "#22c55e",
-  absentColor: "#ef4444"
+  absentColor: "#ef4444",
+  teacherAbsenceMode: TEACHER_ABSENCE_MODE_GRAY
 };
 
 const TEXT = {
   en: {
     pageTitle: "Attendance settings",
-    pageSubtitle: "Choose interface language, theme, and attendance colors.",
+    pageSubtitle: "Choose interface language, theme, attendance colors, and teacher absence behavior.",
     languageLabel: "Language",
     themeLabel: "Theme",
     themeDefaultOption: "Default",
@@ -24,6 +27,9 @@ const TEXT = {
     lunchRowReductionValue: "{value}% smaller",
     presentColorLabel: "Positive attendance color",
     absentColorLabel: "Negative attendance color",
+    teacherAbsenceModeLabel: "Teacher absence handling",
+    teacherAbsenceGrayOption: "Gray cancelled class with strikethrough",
+    teacherAbsenceFreeOption: "Convert cancelled class to free time",
     previewPresent: "Positive attendance preview",
     previewAbsent: "Negative attendance preview",
     save: "Save",
@@ -32,22 +38,25 @@ const TEXT = {
     resetDone: "Defaults restored."
   },
   is: {
-    pageTitle: "Stillingar fyrir m\u00E6tingu",
-    pageSubtitle: "Veldu tungum\u00E1l vi\u00F0m\u00F3ts, \u00FEema og liti fyrir m\u00E6tingu.",
-    languageLabel: "Tungum\u00E1l",
-    themeLabel: "\u00DEema",
-    themeDefaultOption: "Sj\u00E1lfgefi\u00F0",
-    themeNewOption: "N\u00FDtt lita\u00FEema",
-    lunchRowReductionLabel: "Minnkun \u00E1 st\u00E6r\u00F0 h\u00E1degishl\u00E9s",
+    pageTitle: "Stillingar fyrir mætingu",
+    pageSubtitle: "Veldu tungumál viðmóts, þema, liti fyrir mætingu og hvernig kennaraforföll birtast.",
+    languageLabel: "Tungumál",
+    themeLabel: "Þema",
+    themeDefaultOption: "Sjálfgefið",
+    themeNewOption: "Nýtt litaþema",
+    lunchRowReductionLabel: "Minnkun á stærð hádegishlés",
     lunchRowReductionValue: "{value}% minni",
-    presentColorLabel: "Litur fyrir j\u00E1kv\u00E6\u00F0a m\u00E6tingu",
-    absentColorLabel: "Litur fyrir neikv\u00E6\u00F0a m\u00E6tingu",
-    previewPresent: "Forsko\u00F0un j\u00E1kv\u00E6\u00F0rar m\u00E6tingar",
-    previewAbsent: "Forsko\u00F0un neikv\u00E6\u00F0rar m\u00E6tingar",
+    presentColorLabel: "Litur fyrir jákvæða mætingu",
+    absentColorLabel: "Litur fyrir neikvæða mætingu",
+    teacherAbsenceModeLabel: "Birting kennaraforfalla",
+    teacherAbsenceGrayOption: "Grár felldur tími með yfirstrikun",
+    teacherAbsenceFreeOption: "Breyta felldum tíma í laust bil",
+    previewPresent: "Forskoðun jákvæðrar mætingar",
+    previewAbsent: "Forskoðun neikvæðrar mætingar",
     save: "Vista",
-    reset: "Endurstilla sj\u00E1lfgefi\u00F0",
-    saved: "Stillingar vista\u00F0ar.",
-    resetDone: "Sj\u00E1lfgefnar stillingar endurheimtar."
+    reset: "Endurstilla sjálfgefið",
+    saved: "Stillingar vistaðar.",
+    resetDone: "Sjálfgefnar stillingar endurheimtar."
   }
 };
 
@@ -57,6 +66,7 @@ const lunchRowReductionEl = document.getElementById("lunchRowReductionPercent");
 const lunchRowReductionValueEl = document.getElementById("lunchRowReductionValue");
 const presentColorEl = document.getElementById("presentColor");
 const absentColorEl = document.getElementById("absentColor");
+const teacherAbsenceModeEl = document.getElementById("teacherAbsenceMode");
 const statusEl = document.getElementById("status");
 
 const pageTitleEl = document.getElementById("pageTitle");
@@ -68,6 +78,9 @@ const themeNewOptionEl = document.getElementById("themeNewOption");
 const lunchRowReductionLabelEl = document.getElementById("lunchRowReductionLabel");
 const presentColorLabelEl = document.getElementById("presentColorLabel");
 const absentColorLabelEl = document.getElementById("absentColorLabel");
+const teacherAbsenceModeLabelEl = document.getElementById("teacherAbsenceModeLabel");
+const teacherAbsenceGrayOptionEl = document.getElementById("teacherAbsenceGrayOption");
+const teacherAbsenceFreeOptionEl = document.getElementById("teacherAbsenceFreeOption");
 const previewPresentEl = document.getElementById("previewPresent");
 const previewAbsentEl = document.getElementById("previewAbsent");
 const saveBtn = document.getElementById("saveBtn");
@@ -85,9 +98,8 @@ languageEl.addEventListener("change", () => {
   clearStatus();
 });
 
-themeEl.addEventListener("change", () => {
-  clearStatus();
-});
+themeEl.addEventListener("change", clearStatus);
+teacherAbsenceModeEl.addEventListener("change", clearStatus);
 
 lunchRowReductionEl.addEventListener("input", () => {
   renderLunchRowReductionValue(languageEl.value);
@@ -110,7 +122,8 @@ saveBtn.addEventListener("click", async () => {
     theme: themeEl.value,
     lunchRowReductionPercent: lunchRowReductionEl.value,
     presentColor: presentColorEl.value,
-    absentColor: absentColorEl.value
+    absentColor: absentColorEl.value,
+    teacherAbsenceMode: teacherAbsenceModeEl.value
   });
 
   await storageSet(settings);
@@ -132,6 +145,7 @@ function fillForm(settings) {
   lunchRowReductionEl.value = String(settings.lunchRowReductionPercent);
   presentColorEl.value = settings.presentColor;
   absentColorEl.value = settings.absentColor;
+  teacherAbsenceModeEl.value = settings.teacherAbsenceMode;
   renderLunchRowReductionValue(settings.language);
   renderPreview();
 }
@@ -150,6 +164,9 @@ function renderText(language) {
   lunchRowReductionLabelEl.textContent = t.lunchRowReductionLabel;
   presentColorLabelEl.textContent = t.presentColorLabel;
   absentColorLabelEl.textContent = t.absentColorLabel;
+  teacherAbsenceModeLabelEl.textContent = t.teacherAbsenceModeLabel;
+  teacherAbsenceGrayOptionEl.textContent = t.teacherAbsenceGrayOption;
+  teacherAbsenceFreeOptionEl.textContent = t.teacherAbsenceFreeOption;
   previewPresentEl.textContent = t.previewPresent;
   previewAbsentEl.textContent = t.previewAbsent;
   saveBtn.textContent = t.save;
@@ -177,63 +194,39 @@ function renderPreview() {
   previewAbsentEl.style.boxShadow = `inset 0 0 0 9999px ${hexToRgba(absent, 0.06)}`;
 }
 
-function clearStatus() {
-  statusEl.textContent = "";
-}
-
-function storageGet(defaults) {
-  return new Promise(resolve => {
-    chrome.storage.sync.get(defaults, items => resolve(items));
-  });
-}
-
-function storageSet(values) {
-  return new Promise(resolve => {
-    chrome.storage.sync.set(values, () => resolve());
-  });
-}
+function clearStatus() { statusEl.textContent = ""; }
+function storageGet(defaults) { return new Promise(resolve => chrome.storage.sync.get(defaults, items => resolve(items))); }
+function storageSet(values) { return new Promise(resolve => chrome.storage.sync.set(values, () => resolve())); }
 
 function sanitizeSettings(raw) {
   return {
     language: raw?.language === "is" ? "is" : "en",
     theme: normalizeTheme(raw?.theme),
-    lunchRowReductionPercent: normalizeLunchRowReductionPercent(
-      raw?.lunchRowReductionPercent ?? raw?.lunchRowStyle
-    ),
+    lunchRowReductionPercent: normalizeLunchRowReductionPercent(raw?.lunchRowReductionPercent ?? raw?.lunchRowStyle),
     presentColor: normalizeHexColor(raw?.presentColor, DEFAULT_SETTINGS.presentColor),
-    absentColor: normalizeHexColor(raw?.absentColor, DEFAULT_SETTINGS.absentColor)
+    absentColor: normalizeHexColor(raw?.absentColor, DEFAULT_SETTINGS.absentColor),
+    teacherAbsenceMode: normalizeTeacherAbsenceMode(raw?.teacherAbsenceMode)
   };
 }
 
-function normalizeTheme(value) {
-  return value === THEME_NEW ? THEME_NEW : THEME_DEFAULT;
-}
-
+function normalizeTheme(value) { return value === THEME_NEW ? THEME_NEW : THEME_DEFAULT; }
+function normalizeTeacherAbsenceMode(value) { return value === TEACHER_ABSENCE_MODE_FREE ? TEACHER_ABSENCE_MODE_FREE : TEACHER_ABSENCE_MODE_GRAY; }
 function normalizeLunchRowReductionPercent(value) {
   if (value === "compact") return LUNCH_ROW_REDUCTION_MAX;
   if (value === "normal") return LUNCH_ROW_REDUCTION_DEFAULT;
-
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(parsed)) return LUNCH_ROW_REDUCTION_DEFAULT;
-
   return Math.min(LUNCH_ROW_REDUCTION_MAX, Math.max(LUNCH_ROW_REDUCTION_MIN, parsed));
 }
-
 function normalizeHexColor(value, fallback) {
   const raw = String(value || "").trim();
-
   if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
-
   if (/^#[0-9a-f]{3}$/i.test(raw)) {
-    const r = raw[1];
-    const g = raw[2];
-    const b = raw[3];
+    const r = raw[1], g = raw[2], b = raw[3];
     return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
   }
-
   return fallback;
 }
-
 function hexToRgba(hex, alpha) {
   const safe = normalizeHexColor(hex, "#000000");
   const value = safe.slice(1);
